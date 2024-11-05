@@ -1,0 +1,1 @@
+from ECGNet import Model
