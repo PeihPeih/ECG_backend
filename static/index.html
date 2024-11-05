@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECG Signal Viewer</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <h1>Upload and Process ECG Signal</h1>
+    <input type="file" id="datFile" />
+    <input type="file" id="heaFile" />
+    <button onclick="uploadFiles()">Upload</button>
+    <div id="plot"></div>
+    <div id="results"></div>
+    <button id="nextButton" onclick="sendNextSegment()" style="display: none;">Next 5 Labels</button>
+
+    <script>
+        let fullSignal = [];
+        let chunkSize = 10000;  // Kích thước một phần tín hiệu
+        let currentChunkIndex = 0;
+
+        async function uploadFiles() {
+            const datFile = document.getElementById('datFile').files[0];
+            const heaFile = document.getElementById('heaFile').files[0];
+            if (!datFile || !heaFile) {
+                alert('Please select both .dat and .hea files!');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('dat_file', datFile);
+            formData.append('hea_file', heaFile);
+
+            try {
+                const response = await fetch('/upload_ecg_segments', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                // Lưu toàn bộ tín hiệu lead0 vào bộ nhớ
+                fullSignal = result.lead0;
+                currentChunkIndex = 0;
+
+                // Hiển thị nút "Next 5 Labels"
+                document.getElementById('nextButton').style.display = 'block';
+                sendNextSegment();  // Gửi phần đầu tiên ngay sau khi tải
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while uploading or processing the files.');
+            }
+        }
+
+        async function sendNextSegment() {
+            if (currentChunkIndex >= fullSignal.length) {
+                alert('No more data to process.');
+                document.getElementById('nextButton').style.display = 'none';
+                return;
+            }
+
+            // Lấy một phần dữ liệu từ fullSignal
+            const segment = fullSignal.slice(currentChunkIndex, currentChunkIndex + chunkSize);
+            currentChunkIndex += chunkSize;
+
+            try {
+                const response = await fetch('/process_ecg_segment/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `data=${encodeURIComponent(JSON.stringify(segment))}`
+                });
+                const result = await response.json();
+
+                // Hiển thị kết quả trên frontend
+                const resultsDiv = document.getElementById('results');
+                resultsDiv.innerHTML = '';  // Xóa nội dung hiện tại
+
+                result.results.forEach((label, index) => {
+                    const p = document.createElement('p');
+                    p.textContent = `Label ${index + 1}: ${label}`;
+                    resultsDiv.appendChild(p);
+                });
+
+                // Nếu còn dữ liệu, hiển thị nút "Next"
+                if (currentChunkIndex < fullSignal.length) {
+                    document.getElementById('nextButton').style.display = 'block';
+                } else {
+                    document.getElementById('nextButton').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while processing the segment.');
+            }
+        }
+    </script>
+</body>
+</html>

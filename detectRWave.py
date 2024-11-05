@@ -50,13 +50,13 @@ def generateBOI_QRS(signal,mwa_1, mwa_2):
           blocks[i] = 0
     return blocks
 
-def split_segment(data, time_record=30, sfreq=360):
+def split_segment(data, window1=30, window2=360):
     # Denoise signal
     denoise_data = wt(data,"db4", 4, 2, 4)
     
     y = np.square(np.diff(denoise_data))
     # High, Low signal
-    mwa_qrs, mwa_beat_qrs = two_average_detector(y, time_record,sfreq)
+    mwa_qrs, mwa_beat_qrs = two_average_detector(y, window1,window2)
     block_qrs = generateBOI_QRS(y, mwa_qrs, mwa_beat_qrs)
     # filter position
     temp = []
@@ -82,14 +82,16 @@ def split_segment(data, time_record=30, sfreq=360):
         R_Peaks.append(index)
     
     segments = []
-    
+    times = []
     for R_peak in R_Peaks:
         if R_peak < 180 or R_peak > len(data) - 180:
             continue
-        segment = data[R_peak-180:R_peak+180]
+        sample_start = R_peak - 180
+        sample_end = R_peak + 180
+        segment = data[sample_start:sample_end]
         segment = np.array(segment)
         segments.append(segment)
-    
-    return np.array(segments)
+        times.append(R_peak)
+    return np.array(segments),times
 
     

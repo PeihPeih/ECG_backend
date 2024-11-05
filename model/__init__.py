@@ -1,1 +1,1 @@
-from ECGNet import Model
+from model.ECGNet import Model
