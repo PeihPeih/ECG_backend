@@ -9,14 +9,22 @@ from detectRWave import split_segment
 import json
 from fastapi.staticfiles import StaticFiles
 import shutil
+from fastapi.middleware.cors import CORSMiddleware
 
 latest_result_file = None
 mapping = {0:'A',1:'N'}
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 model = Model('./model/best.keras')
-# Mount thư mục chứa các tệp tĩnh
-#app.mount("/static", StaticFiles(directory="static"), name="static")
 UPLOAD_DIR = "./data"
+
 
 @app.post("/upload_file")
 async def upload_dat_file(file: UploadFile = File(...)):
@@ -37,11 +45,11 @@ async def upload_dat_file(file: UploadFile = File(...)):
         results = model.predict(segments)
         results = list(map(mapping.get,results))
         result_filename = os.path.join(UPLOAD_DIR, file.filename.replace('.dat', '.json'))
-        global latest_result_file 
+        global latest_result_file   
         latest_result_file = result_filename
         with open(result_filename, 'w') as result_file:
             json.dump({"signal": signal.tolist(), "times": times, "results": results}, result_file) 
-
+        print(1)
         return {
             "message": "File processed successfully",
             "result_file": result_filename
