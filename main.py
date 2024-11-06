@@ -13,9 +13,9 @@ import shutil
 latest_result_file = None
 mapping = {0:'A',1:'N'}
 app = FastAPI()
-model = Model('model/best.keras')
+model = Model('./model/best.keras')
 # Mount thư mục chứa các tệp tĩnh
-app.mount("/static", StaticFiles(directory="static"), name="static")
+#app.mount("/static", StaticFiles(directory="static"), name="static")
 UPLOAD_DIR = "./data"
 
 @app.post("/upload_file")
@@ -36,14 +36,12 @@ async def upload_dat_file(file: UploadFile = File(...)):
         segments,times = split_segment(data=signal)
         results = model.predict(segments)
         results = list(map(mapping.get,results))
-        
         result_filename = os.path.join(UPLOAD_DIR, file.filename.replace('.dat', '.json'))
+        global latest_result_file 
+        latest_result_file = result_filename
         with open(result_filename, 'w') as result_file:
-            json.dump({"signal": signal.tolist(),
-                       "times": times.tolist(), "results": results}, result_file) 
-        if os.path.exists(file_path):
-            os.remove(file_path)
-            
+            json.dump({"signal": signal.tolist(), "times": times, "results": results}, result_file) 
+
         return {
             "message": "File processed successfully",
             "result_file": result_filename
@@ -51,17 +49,18 @@ async def upload_dat_file(file: UploadFile = File(...)):
         
     except Exception as e:
         if os.path.exists(file_path):
-            os.remove(file_path)
+            pass
             
             
 @app.get("/get_segments")
-async def get_segments(result_file:str,index:int=0):
+async def get_segments(index:int=0):
     try:
-        with open(result_file,'r') as file:
+        global latest_result_file
+        with open(latest_result_file,'r') as file:
             data = json.load(file)
             signal = np.array(data['signal'])
             times = data['times']
-            results = data['reuslts']
+            results = data['results']
             
         if index >= len(times):
             return {
@@ -85,3 +84,6 @@ async def get_segments(result_file:str,index:int=0):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving segments: {str(e)}")
     
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app,host='127.0.0.1', port=8000)
