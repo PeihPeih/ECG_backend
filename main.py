@@ -9,6 +9,8 @@ from detectRWave import split_segment
 import json
 from fastapi.staticfiles import StaticFiles
 import shutil
+from fastapi.responses import HTMLResponse
+from pathlib import Path
 
 latest_result_file = None
 mapping = {0:'A',1:'N'}
@@ -16,6 +18,7 @@ app = FastAPI()
 model = Model('./model/best.keras')
 # Mount thư mục chứa các tệp tĩnh
 #app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
 UPLOAD_DIR = "./data"
 
 @app.post("/upload_file")

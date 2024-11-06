@@ -1,98 +1,115 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ECG Signal Viewer</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <title>Signal Visualization</title>
+    <style>
+        #signal-plot {
+            width: 600px;
+            height: 300px;
+            border: 1px solid black;
+        }
+    </style>
 </head>
 <body>
-    <h1>Upload and Process ECG Signal</h1>
-    <input type="file" id="datFile" />
-    <input type="file" id="heaFile" />
-    <button onclick="uploadFiles()">Upload</button>
-    <div id="plot"></div>
-    <div id="results"></div>
-    <button id="nextButton" onclick="sendNextSegment()" style="display: none;">Next 5 Labels</button>
+    <h1>Upload .dat File and Visualize Signal Segments</h1>
+
+    <!-- File upload form -->
+    <input type="file" id="fileInput">
+    <button onclick="uploadFile()">Upload and Process</button>
+    
+    <!-- Display the message -->
+    <p id="message"></p>
+
+    <!-- Segment Controls -->
+    <button onclick="fetchSegment(-1)">Previous Segment</button>
+    <button onclick="fetchSegment(1)">Next Segment</button>
+
+    <!-- Canvas for visualization -->
+    <canvas id="signal-plot"></canvas>
 
     <script>
-        let fullSignal = [];
-        let chunkSize = 10000;  // Kích thước một phần tín hiệu
-        let currentChunkIndex = 0;
+        let currentIndex = 0;
+        let resultFile = null;
 
-        async function uploadFiles() {
-            const datFile = document.getElementById('datFile').files[0];
-            const heaFile = document.getElementById('heaFile').files[0];
-            if (!datFile || !heaFile) {
-                alert('Please select both .dat and .hea files!');
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput').files[0];
+            if (!fileInput) {
+                alert("Please select a .dat file first.");
                 return;
             }
 
             const formData = new FormData();
-            formData.append('dat_file', datFile);
-            formData.append('hea_file', heaFile);
+            formData.append("file", fileInput);
 
             try {
-                const response = await fetch('/upload_ecg_segments', {
-                    method: 'POST',
+                const response = await fetch("http://127.0.0.1:8000/upload_file", {
+                    method: "POST",
                     body: formData
                 });
                 const result = await response.json();
-
-                // Lưu toàn bộ tín hiệu lead0 vào bộ nhớ
-                fullSignal = result.lead0;
-                currentChunkIndex = 0;
-
-                // Hiển thị nút "Next 5 Labels"
-                document.getElementById('nextButton').style.display = 'block';
-                sendNextSegment();  // Gửi phần đầu tiên ngay sau khi tải
+                document.getElementById('message').innerText = result.message;
+                resultFile = result.result_file;
+                currentIndex = 0; // Reset to the first segment
+                fetchSegment(0); // Fetch the first segment
             } catch (error) {
-                console.error('Error:', error);
-                alert('An error occurred while uploading or processing the files.');
+                console.error("Error uploading file:", error);
             }
         }
 
-        async function sendNextSegment() {
-            if (currentChunkIndex >= fullSignal.length) {
-                alert('No more data to process.');
-                document.getElementById('nextButton').style.display = 'none';
+        async function fetchSegment(direction) {
+            // Update the index based on the direction
+            currentIndex += direction;
+
+            if (!resultFile) {
+                alert("Please upload a file first.");
                 return;
             }
 
-            // Lấy một phần dữ liệu từ fullSignal
-            const segment = fullSignal.slice(currentChunkIndex, currentChunkIndex + chunkSize);
-            currentChunkIndex += chunkSize;
-
             try {
-                const response = await fetch('/process_ecg_segment/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: `data=${encodeURIComponent(JSON.stringify(segment))}`
-                });
-                const result = await response.json();
+                const response = await fetch(`http://127.0.0.1:8000/get_segments?index=${currentIndex}`);
+                const data = await response.json();
 
-                // Hiển thị kết quả trên frontend
-                const resultsDiv = document.getElementById('results');
-                resultsDiv.innerHTML = '';  // Xóa nội dung hiện tại
-
-                result.results.forEach((label, index) => {
-                    const p = document.createElement('p');
-                    p.textContent = `Label ${index + 1}: ${label}`;
-                    resultsDiv.appendChild(p);
-                });
-
-                // Nếu còn dữ liệu, hiển thị nút "Next"
-                if (currentChunkIndex < fullSignal.length) {
-                    document.getElementById('nextButton').style.display = 'block';
-                } else {
-                    document.getElementById('nextButton').style.display = 'none';
+                if (data.message === "Index out of range") {
+                    alert(data.message);
+                    currentIndex -= direction; // Revert index change if out of range
+                    return;
                 }
+
+                // Display signal segment
+                plotSignal(data.segment_signal, data.time_range, data.label);
             } catch (error) {
-                console.error('Error:', error);
-                alert('An error occurred while processing the segment.');
+                console.error("Error fetching segment:", error);
             }
+        }
+
+        function plotSignal(signal, timeRange, label) {
+            const canvas = document.getElementById("signal-plot");
+            const ctx = canvas.getContext("2d");
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.beginPath();
+            const scaleX = canvas.width / signal.length;
+            const scaleY = canvas.height / (Math.max(...signal) - Math.min(...signal));
+
+            // Plot the signal
+            signal.forEach((value, index) => {
+                const x = index * scaleX;
+                const y = canvas.height - (value - Math.min(...signal)) * scaleY;
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+
+            ctx.strokeStyle = "blue";
+            ctx.stroke();
+
+            // Display label and time range
+            document.getElementById("message").innerText = `Label: ${label}, Time Range: ${timeRange[0]} - ${timeRange[1]}`;
         }
     </script>
 </body>
